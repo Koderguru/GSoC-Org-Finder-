@@ -7,6 +7,7 @@
 (function(){
   const saved = localStorage.getItem('theme') || 'light';
   document.documentElement.classList.toggle('dark', saved === 'dark');
+  document.documentElement.setAttribute('data-theme', saved);
   updateThemeIcon();
 })();
 
@@ -22,16 +23,28 @@ function escapeHtml(value) {
 
 globalThis.toggleTheme = function(){
   const isDark = document.documentElement.classList.toggle('dark');
+  document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
   localStorage.setItem('theme', isDark ? 'dark' : 'light');
   updateThemeIcon();
 };
 
 function updateThemeIcon(){
-  const icon = document.querySelector('#themeToggleBtn .material-symbols-outlined');
-  if(icon){
-    const isDark = document.documentElement.classList.contains('dark');
-    icon.textContent = isDark ? 'light_mode' : 'dark_mode';
-  }
+  const isDark = document.documentElement.classList.contains('dark');
+  const iconName = isDark ? 'light_mode' : 'dark_mode';
+  const label = isDark ? 'Switch to light theme' : 'Switch to dark theme';
+  const syncButton = (btn) => {
+    if (!btn) return;
+    const icon = btn.querySelector('.material-symbols-outlined');
+    if (icon) icon.textContent = iconName;
+    btn.setAttribute('aria-pressed', isDark ? 'true' : 'false');
+    btn.setAttribute('aria-label', label);
+    btn.setAttribute('title', label);
+  };
+
+  syncButton(document.getElementById('themeToggleBtn'));
+  syncButton(document.getElementById('heroThemeToggle'));
+  const heroIcon = document.getElementById('heroThemeIcon');
+  if (heroIcon) heroIcon.textContent = iconName;
 }
 
 // ══════════════════════════════════════════════
@@ -407,7 +420,7 @@ function renderCompareTable(){
     {label:'GSoC Years',  vals:arr.map(o=>o.years), type:'bar', max:11, best:'high'},
     {label:'Since',       vals:arr.map(o=>o.firstYear), type:'text'},
     {label:'Competition', vals:arr.map(o=>cLbl(o.competition)), scores:arr.map(o=>compScore[o.competition]), type:'scored', best:'low'},
-    {label:'<span class="material-symbols-outlined align-text-bottom text-[1em]">star</span> Stars',     vals:arr.map(o=>o._gh?fmt(o._gh.stars):'—'), scores:arr.map(o=>o._gh?.stars||0), type:'scored', best:'high'},
+    {label:'Stars', icon:'star', vals:arr.map(o=>o._gh?fmt(o._gh.stars):'—'), scores:arr.map(o=>o._gh?.stars||0), type:'scored', best:'high'},
     {label:'Forks',       vals:arr.map(o=>o._gh?fmt(o._gh.forks):'—'), scores:arr.map(o=>o._gh?.forks||0), type:'scored', best:'high'},
     {label:'Open Issues', vals:arr.map(o=>o._gh?fmt(o._gh.issues):'—'), scores:arr.map(o=>o._gh?.issues||0), type:'scored', best:'low'},
     {label:'Last Commit', vals:arr.map(o=>o._gh?o._gh.lastCommit:'—'), type:'text'},
@@ -438,7 +451,8 @@ function renderCompareTable(){
     } else {
       cells=row.vals.map(v=>`<td class="cmp-val">${escapeHtml(String(v))}</td>`).join('');
     }
-    tbody+=`<tr><td class="row-label">${escapeHtml(row.label)}</td>${cells}</tr>`;
+    const rowLabel = row.icon ? `<span class="material-symbols-outlined align-text-bottom text-[1em]">${escapeHtml(row.icon)}</span> ${escapeHtml(row.label)}` : escapeHtml(row.label);
+    tbody+=`<tr><td class="row-label">${rowLabel}</td>${cells}</tr>`;
   }
   wrap.innerHTML=`<table class="compare-table"><thead>${thead}</thead><tbody>${tbody}</tbody></table>
     <p style="font-size:10px;color:var(--muted);margin-top:10px;text-align:right"><span class="material-symbols-outlined align-text-bottom text-green-500 text-[1.2em]">check_circle</span> Best value &nbsp; <span class="material-symbols-outlined align-text-bottom text-red-500 text-[1.2em]">cancel</span> Lowest value &nbsp; (requires GitHub stats to be fetched)</p>`;
@@ -971,24 +985,31 @@ function exportToCSV() {
     const cleanTech = Array.isArray(o.tags) ? o.tags.join('; ') : '';
     const cleanTopics = Array.isArray(o.topics) ? o.topics.join('; ') : '';
     return [
-      `"${o.name.replace(/"/g, '""')}"`,
-      `"${o.cat}"`,
-      `"${cleanTech.replace(/"/g, '""')}"`,
-      `"${cleanTopics.replace(/"/g, '""')}"`,
-      `"${ghUrl}"`,
-      gfi, stars, forks, `"${lastCommit}"`
-    ].join(',');
+      o.name,
+      o.cat,
+      cleanTech,
+      cleanTopics,
+      ghUrl,
+      gfi,
+      stars,
+      forks,
+      lastCommit
+    ].map(csvEscape).join(',');
   });
   
-  const csvContent = [headers.join(','), ...rows].join('\n');
+  const csvContent = [headers.map(csvEscape).join(','), ...rows].join('\n');
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.setAttribute("href", url);
   link.setAttribute("download", "gsoc_orgs_export.csv");
   document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  try {
+    link.click();
+  } finally {
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
 }
 
 // ══════════════════════════════════════════════
